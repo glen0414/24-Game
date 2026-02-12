@@ -38,6 +38,19 @@ int main(void){
 							if(cnt == 3)break;
 						}
 
+						int sol_count = res.size();
+						string difficulty;
+
+						if (sol_count < 4) {
+    							difficulty = "Hard";
+						} else if (sol_count <= 12) {
+   					 		difficulty = "Medium";
+						} else {
+    							difficulty = "Easy";
+						}	
+
+						entry["difficulty"] = difficulty;
+						entry["sol_count"] = sol_count;
 						entry["solutions"] = sols;
 						data.push_back(entry);
 					}
