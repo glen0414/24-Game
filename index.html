@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>24-DLE | 每日挑戰</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --correct: #6aaa64;
+            --wrong: #ce3a3a;
+            --neutral: #787c7e;
+            --border: #d3d6da;
+        }
+        body {
+            font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex; flex-direction: column; align-items: center;
+            margin: 0; padding: 20px;
+        }
+        header {
+            border-bottom: 1px solid var(--border);
+            width: 100%; max-width: 500px;
+            text-align: center; margin-bottom: 20px;
+        }
+        .stats-bar { font-size: 0.9rem; color: var(--neutral); margin-bottom: 10px; }
+        .numbers-container { display: flex; gap: 10px; margin: 20px 0; }
+        .num-card {
+            width: 65px; height: 65px; border: 2px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px; font-weight: bold; border-radius: 4px;
+            transition: all 0.3s;
+        }
+        /* 難度顏色標籤 */
+        .hard { border-color: #f44336; color: #f44336; }
+        .medium { border-color: #ff9800; color: #ff9800; }
+        .easy { border-color: var(--correct); color: var(--correct); }
+
+        #input-area { margin: 20px 0; display: flex; gap: 10px; }
+        input {
+            padding: 12px; font-size: 1.1rem; border: 2px solid var(--border);
+            border-radius: 4px; width: 220px; outline: none;
+        }
+        button {
+            padding: 10px 20px; font-size: 1rem; font-weight: bold;
+            background-color: #878a8c; color: white; border: none;
+            border-radius: 4px; cursor: pointer;
+        }
+        button:hover { background-color: #565758; }
+
+        #history { width: 100%; max-width: 350px; display: flex; flex-direction: column; gap: 8px; }
+        .attempt {
+            padding: 12px; border: 1px solid var(--border); border-radius: 4px;
+            display: flex; justify-content: space-between; font-weight: bold;
+            animation: flipIn 0.5s ease;
+        }
+        .attempt.success { background-color: var(--correct); color: white; border: none; }
+        
+        .modal {
+            margin-top: 20px; padding: 15px; border-radius: 8px;
+            background-color: #f8f9fa; border: 1px solid var(--border);
+            display: none; width: 100%; max-width: 350px; text-align: center;
+        }
+        code { background: #eee; padding: 2px 4px; border-radius: 3px; }
+
+        @keyframes flipIn {
+            from { transform: rotateX(-90deg); opacity: 0; }
+            to { transform: rotateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>24-DLE</h1>
+        <div id="date-display" class="stats-bar"></div>
+    </header>
+
+    <div class="numbers-container" id="numbers">
+        <div class="num-card">?</div><div class="num-card">?</div>
+        <div class="num-card">?</div><div class="num-card">?</div>
+    </div>
+
+    <div id="input-area">
+        <input type="text" id="user-input" placeholder="例如: (8-3)*8/3" autocomplete="off">
+        <button onclick="checkAnswer()">提交</button>
+    </div>
+
+    <div id="history"></div>
+
+    <div id="end-modal" class="modal">
+        <h2 id="result-title"></h2>
+        <div id="solutions-area"></div>
+        <button onclick="share()" style="margin-top: 15px; background-color: var(--correct);">分享戰果 📋</button>
+    </div>
+
+    <script>
+        let dailyNumbers = [];
+        let referenceSolutions = [];
+        let attempts = [];
+        const MAX_ATTEMPTS = 5;
+        let gameOver = false;
+
+        async function initGame() {
+            try {
+                const response = await fetch('challenges.json');
+                const data = await response.json();
+                
+                // 每日一題邏輯
+                const today = new Date();
+                const dateStr = today.toISOString().split('T')[0];
+                document.getElementById('date-display').innerText = `Challenge ID: #${dateStr.replace(/-/g, '')}`;
+                
+                // 使用日期作為 seed 選擇題目
+                const seed = today.getFullYear() * 1000 + today.getMonth() * 32 + today.getDate();
+                const index = seed % data.length;
+                const task = data[index];
+
+                dailyNumbers = task.nums;
+                referenceSolutions = task.solutions;
+                
+                renderNumbers(task.difficulty);
+            } catch (e) {
+                alert("無法載入挑戰，請確保透過伺服器開啟且存在 challenges.json");
+            }
+        }
+
+        function renderNumbers(diff) {
+            const container = document.getElementById('numbers');
+            const diffClass = diff ? diff.toLowerCase() : '';
+            container.innerHTML = dailyNumbers.map(n => 
+                `<div class="num-card ${diffClass}">${n}</div>`
+            ).join('');
+        }
+
+        function checkAnswer() {
+            if (gameOver) return;
+            const inputField = document.getElementById('user-input');
+            const rawInput = inputField.value.trim();
+            const cleanInput = rawInput.replace(/\s+/g, '');
+            
+            // 1. 數字比對
+            const usedNums = cleanInput.match(/\d+/g)?.map(Number).sort();
+            if (!usedNums || JSON.stringify(usedNums) !== JSON.stringify([...dailyNumbers].sort())) {
+                alert("必須使用給定的四個數字且各一次！");
+                return;
+            }
+
+            // 2. 計算結果
+            try {
+                const result = new Function(`return ${cleanInput}`)();
+                const isCorrect = Math.abs(result - 24) < 1e-6;
+                
+                attempts.push({ expr: rawInput, res: result, correct: isCorrect });
+                updateHistory();
+                inputField.value = "";
+
+                if (isCorrect || attempts.length >= MAX_ATTEMPTS) {
+                    endGame(isCorrect);
+                }
+            } catch (e) {
+                alert("算式語法錯誤，請檢查括號與運算子。");
+            }
+        }
+
+        function updateHistory() {
+            const histEl = document.getElementById('history');
+            const last = attempts[attempts.length - 1];
+            const div = document.createElement('div');
+            div.className = `attempt ${last.correct ? 'success' : ''}`;
+            div.innerHTML = `<span>${last.expr}</span> <span>= ${Number.isInteger(last.res) ? last.res : last.res.toFixed(2)}</span>`;
+            histEl.prepend(div);
+        }
+
+        function endGame(win) {
+            gameOver = true;
+            const modal = document.getElementById('end-modal');
+            const title = document.getElementById('result-title');
+            const solArea = document.getElementById('solutions-area');
+            
+            modal.style.display = 'block';
+            title.innerText = win ? "🎉 答對了！" : "下回努力！";
+            title.style.color = win ? "var(--correct)" : "var(--wrong)";
+
+            let html = "<p>參考解答：</p>";
+            referenceSolutions.forEach(s => html += `<code>${s}</code><br>`);
+            solArea.innerHTML = html;
+        }
+
+        function share() {
+            const win = attempts.some(a => a.correct);
+            const score = win ? attempts.length : 'X';
+            let emojiGrid = attempts.map(a => a.correct ? "🟩" : "🟥").join("");
+            const text = `24-DLE #${new Date().getDate()} ${score}/${MAX_ATTEMPTS}\n${emojiGrid}`;
+            
+            navigator.clipboard.writeText(text).then(() => alert("戰果已複製！"));
+        }
+
+        document.getElementById('user-input').addEventListener('keypress', e => {
+            if (e.key === 'Enter') checkAnswer();
+        });
+
+        initGame();
+    </script>
+</body>
+</html>
