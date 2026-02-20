@@ -21,4 +21,5 @@
 2. 用瀏覽器打開 `index.html`
 
 ## 📸 介面預覽
+<img width="750" height="496" alt="image" src="https://github.com/user-attachments/assets/eaf0af18-96dd-4f4b-a532-a3c96f05b141" />
 
